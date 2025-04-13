@@ -57,6 +57,13 @@ export default [
     icon: 'message',
     component: './EarthquakeChat',
   },
+  // 新增 SeismicAnalyzer 路由
+  {
+    path: '/earthquake-predictions',
+    name: '地震预测',
+    icon: 'warning',
+    component: './EarthquakePredictions/SeismicAnalyzer',
+  },
   {
     path: '/',
     redirect: '/welcome',
