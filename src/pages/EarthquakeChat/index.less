@@ -1,0 +1,147 @@
+// Container for the entire chat area
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%; // Assume PageContainer provides a flex context or sufficient height
+  min-height: 500px; // Add a minimum height for robustness
+  background-color: #fafafa; // Change background color to a very light gray
+  border-radius: 8px; // Add rounded corners to the whole container
+  overflow: hidden; // Ensure child elements respect the border-radius
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09); // Optional shadow
+}
+
+// Container for the message list
+.messageListContainer {
+  flex: 1; // Takes up available space
+  overflow-y: auto; // Enables vertical scrolling
+  padding: 20px 20px 0 20px; // Adjust padding, remove bottom padding here
+  // Add some subtle scrollbar styling (optional, browser-specific)
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #cccccc;
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+// General message item styling
+:global(.ant-list-item) {
+  border-bottom: none !important; // Remove default list item separator
+  margin-bottom: 15px;
+}
+
+// Message content bubble styling
+.messageContent {
+  padding: 10px 15px;
+  border-radius: 18px; // Rounded corners for bubble effect
+  max-width: 70%; // Limit message width
+  white-space: pre-wrap; // Preserve line breaks
+  word-wrap: break-word; // Break long words
+  // Restore inline-block
+  display: inline-block;
+}
+
+.userMessage {
+  justify-content: flex-end;
+  :global(.ant-list-item-meta) {
+    align-items: flex-end; // Align avatar to the bottom of the message
+    flex-direction: row-reverse;
+  }
+  :global(.ant-list-item-meta-content) {
+    text-align: right;
+  }
+  :global(.ant-list-item-meta-avatar) {
+    margin-left: 10px;
+    margin-right: 0;
+    align-self: flex-start; // Align avatar top in its flex container
+  }
+  .messageContent {
+    background-color: #1890ff; // User message background color (Ant Design primary blue)
+    color: white;
+    border-bottom-right-radius: 5px; // Slightly less round corner near avatar
+  }
+}
+
+.assistantMessage {
+  justify-content: flex-start;
+  :global(.ant-list-item-meta) {
+    align-items: flex-end; // Align avatar to the bottom of the message
+  }
+   :global(.ant-list-item-meta-avatar) {
+    margin-right: 10px;
+    align-self: flex-start; // Align avatar top in its flex container
+  }
+  .messageContent {
+    background-color: #fff; // Assistant message background color
+    color: #333;
+    border: 1px solid #e8e8e8;
+    border-bottom-left-radius: 5px; // Slightly less round corner near avatar
+  }
+  :global(.ant-list-item-meta-content) {
+  }
+}
+
+// Loading indicator style
+.loadingIndicator {
+  text-align: center;
+  padding: 10px;
+  color: #888;
+}
+
+// Input area container style
+.inputAreaContainer {
+  padding: 15px 20px;
+  border-top: none; 
+  background-color: #ffffff;
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04); 
+  // Use Flexbox and align items to the bottom
+  display: flex;
+  align-items: flex-end; 
+}
+
+// Style for the input text area itself
+.inputTextArea {
+  border-radius: 18px; // Restore full radius
+  border: 1px solid #d9d9d9; 
+  // Remove border-right: none
+  // border-right: none; 
+  padding: 8px 12px; // Re-adjust padding
+  line-height: 1.5; // Re-adjust line-height
+  // Add flex: 1 and margin-right
+  flex: 1; 
+  margin-right: 8px; 
+  margin-bottom: 0; 
+  // Remove min-height
+  // min-height: 38px; 
+  &:focus {
+    border-color: #40a9ff; 
+    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2); // Restore default Ant focus shadow
+  }
+}
+
+// Adjust button style slightly to align better
+.inputAreaContainer :global(.ant-btn-primary) { // Target primary button specifically
+  // Remove fixed height
+  // height: 38px; 
+  border-radius: 18px; // Restore full radius
+  flex-shrink: 0; 
+  // Remove margin-left if added previously
+  // margin-left: 8px; 
+  // Adjust padding and line-height for vertical alignment
+  padding: 8px 15px; // Match input padding vertically
+  line-height: 1.5; // Match input line-height
+  // Remove internal flex alignment if added previously
+  // display: flex;
+  // align-items: center;
+  // justify-content: center;
+}
+
+// Override default Space.Compact styles if necessary - NO LONGER NEEDED
+// :global(.ant-space-compact) {
+//   display: flex; 
+//   width: 100%;
+// } 
