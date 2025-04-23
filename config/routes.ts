@@ -82,6 +82,12 @@ export default [
     component: './WaveSimulation',
   },
   {
+    path: '/impact-simulation',
+    name: '地震影响模拟',
+    icon: 'alert',
+    component: './ImpactSimulation',
+  },
+  {
     path: '/',
     redirect: '/welcome',
   },

@@ -204,14 +204,14 @@ def visualize_results(stream, events, output_file=None):
     for i in range(3):
         plt.subplot(3, 1, i+1)
         plt.plot(st_slice[i].times(), st_slice[i].data, label=st_slice[i].stats.channel)
-        plt.axvline(t_P[0] - st_slice[i].stats.starttime, color='r', label='P波到时')
-        plt.axvline(t_S[0] - st_slice[i].stats.starttime, color='g', label='S波到时')
-        plt.title(f'通道 {st_slice[i].stats.channel}')
+        plt.axvline(t_P[0] - st_slice[i].stats.starttime, color='r', label='P Arrival')
+        plt.axvline(t_S[0] - st_slice[i].stats.starttime, color='g', label='S Arrival')
+        plt.title(f'Channel {st_slice[i].stats.channel}')
         plt.legend(loc='upper right')
         
         if i == 0:
-            plt.title(f'P波到时: {t_P[0].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}\n'
-                      f'S波到时: {t_S[0].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}')
+            plt.title(f'P Arrival: {t_P[0].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}\n'
+                      f'S Arrival: {t_S[0].strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}')
     
     plt.tight_layout()
     

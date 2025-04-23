@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PageContainer } from '@ant-design/pro-layout';
-import { Card, Spin, Button, message, Alert, Row, Col, Slider, DatePicker, Statistic, Divider, Typography } from 'antd';
+import { Card, Spin, Button, message, Alert, Row, Col, Slider, DatePicker, Statistic, Divider, Typography, Image } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import AMapLoader from '@amap/amap-jsapi-loader';
 import type { RangePickerProps } from 'antd/es/date-picker';
@@ -16,7 +16,7 @@ dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 import styles from './index.less';
 
-const { Text, Title } = Typography;
+const { Text, Title, Paragraph } = Typography;
 const { RangePicker } = DatePicker;
 
 // --- 全局类型声明 ---
@@ -153,6 +153,122 @@ const calculateStats = (quakes: USGSFeature[]): EarthquakeStats | null => {
     };
 };
 
+// ++ 添加翻译映射和函数 ++
+// 状态翻译
+const statusTranslations: Record<string, string> = {
+    automatic: '自动',
+    reviewed: '已审查',
+    deleted: '已删除',
+};
+
+// 震级类型翻译
+const magTypeTranslations: Record<string, string> = {
+    md: '持续时间震级',
+    ml: '地方性震级 (里氏震级)',
+    ms: '面波震级',
+    mw: '矩震级',
+    me: '能量震级',
+    mi: '烈度震级',
+    mb: '体波震级',
+    mlg: '区域体波震级',
+};
+
+// 地点翻译 (与 TableList/Welcome 类似)
+const locationTranslationMap: Record<string, string> = {
+    'Ascension Island': '阿森松岛',
+    'Philippines': '菲律宾',
+    'China': '中国',
+    'South Indian Ocean': '南印度洋',
+    'Guam': '关岛',
+    'Nevada': '内华达州',
+    'Alaska': '阿拉斯加州',
+    'CA': '加利福尼亚州',
+    // --- 中国相关 ---
+    'Sichuan Province, China': '中国四川省',
+    'Yunnan Province, China': '中国云南省',
+    'Xinjiang, China': '中国新疆',
+    'Tibet, China': '中国西藏',
+    'Xizang, China': '中国西藏', // Alias for Tibet
+    'Taiwan': '台湾',
+    'Taiwan Region': '台湾地区',
+    'Qinghai Province, China': '中国青海省',
+    'Gansu Province, China': '中国甘肃省',
+    'Hebei Province, China': '中国河北省',
+    'Shanxi Province, China': '中国山西省',
+    'Shaanxi Province, China': '中国陕西省',
+    'South China Sea': '南海',
+    'East China Sea': '东海',
+    'Yellow Sea': '黄海',
+    // --- 亚洲其他 ---
+    'Japan': '日本',
+    'Indonesia': '印度尼西亚',
+    'Iran': '伊朗',
+    'Turkey': '土耳其',
+    'Nepal': '尼泊尔',
+    'India': '印度',
+    'Pakistan': '巴基斯坦',
+    'Afghanistan': '阿富汗',
+    'Myanmar': '缅甸',
+    'Russia': '俄罗斯',
+    'Kuril Islands': '千岛群岛',
+    'off the east coast of Honshu, Japan': '日本本州东海岸附近海域',
+    'near the coast of': '靠近海岸', // Partial match prefix
+    'region': '地区', // General term
+    // --- 太平洋 ---
+    'Fiji': '斐济',
+    'Tonga': '汤加',
+    'Vanuatu': '瓦努阿图',
+    'Solomon Islands': '所罗门群岛',
+    'Papua New Guinea': '巴布亚新几内亚',
+    'New Zealand': '新西兰',
+    // --- 美洲 ---
+    'Chile': '智利',
+    'Peru': '秘鲁',
+    'Mexico': '墨西哥',
+    'California': '加利福尼亚州',
+    'Oklahoma': '俄克拉荷马州',
+    'Washington': '华盛顿州',
+    'Oregon': '俄勒冈州',
+    'Canada': '加拿大',
+    'Central America': '中美洲',
+    'South America': '南美洲',
+    'Caribbean': '加勒比地区',
+    // --- 欧洲 ---
+    'Greece': '希腊',
+    'Italy': '意大利',
+    'Romania': '罗马尼亚',
+    'Iceland': '冰岛',
+    // --- 其他区域/洋脊 ---
+    'Kermadec Islands': '克马德克群岛',
+    'South Sandwich Islands': '南桑威奇群岛',
+    'Mid-Indian Ridge': '中印度洋海岭',
+    'Reykjanes Ridge': '雷克雅内斯海岭',
+    'Mid-Atlantic Ridge': '中大西洋海岭',
+    'border region': '边境地区', // General phrase
+    // ...可以继续添加...
+};
+
+const translateLocation = (place: string | null): string => {
+    if (!place) return '未知地点';
+    let translatedPlace = place;
+    for (const key in locationTranslationMap) {
+        const regex = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        translatedPlace = translatedPlace.replace(regex, locationTranslationMap[key]);
+    }
+    return translatedPlace;
+};
+// ++ 翻译映射和函数结束 ++
+
+// ++ 更新 P/S 图示例文件列表 (确保这些文件已移至 public/resources/picture 目录下) ++
+const availablePlotFiles = [
+  'demo_test_1_menyuan_QH_MIH_250422143900.png', // 使用用户提供的具体文件名
+  // 'plot_example_1.png', // 暂时注释掉其他，除非你确认它们也存在且移动了
+  // 'plot_example_2.png',
+  // 'placeholder_plot.png', 
+  // 添加更多你确认存在且已移动的文件名...
+];
+// ++ 文件列表结束 ++
+
 const RealtimeEarthquakeMap: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null); // 存储地图实例
@@ -170,6 +286,11 @@ const RealtimeEarthquakeMap: React.FC = () => {
   const [timeRange, setTimeRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   // 统计数据 (初始为空)
   const [stats, setStats] = useState<EarthquakeStats | null>(null);
+  // ++ 更新 P/S 图状态，使用具体文件名作为默认值 ++
+  const [currentPlotFilename, setCurrentPlotFilename] = useState<string>(
+    availablePlotFiles.length > 0 ? availablePlotFiles[0] : '' // 设置为列表第一个（现在是具体文件名），如果列表为空则为空字符串
+  );
+  // ++ 状态结束 ++
 
   // --- 辅助函数 ---
   // 格式化时间 (使用 dayjs)
@@ -191,8 +312,9 @@ const RealtimeEarthquakeMap: React.FC = () => {
 
   // 获取震级半径 (可根据实际需求调整)
   const getMagnitudeRadius = (mag: number | null): number => {
-     if (mag === null) return 5;
-     return 5 + Math.pow(mag, 1.5); // 半径随震级指数增长
+    // Handle null or negative magnitudes by returning a default radius
+    if (mag === null || mag < 0) return 5;
+    return 5 + Math.pow(mag, 1.5); // 半径随震级指数增长
   };
 
   // --- 地图初始化和数据加载 ---
@@ -331,21 +453,29 @@ const RealtimeEarthquakeMap: React.FC = () => {
               title: properties.title || '地震事件',
           });
 
-          // 点击事件：显示信息窗体 (内容已在步骤 6 更新)
+          // 点击事件：显示信息窗体 & 更新 P/S 图
           marker.on('click', (e: any) => {
               const clickedQuake = e.target.getExtData() as USGSFeature;
               const clickPos = e.target.getPosition();
               const props = clickedQuake.properties;
               const coords = clickedQuake.geometry.coordinates;
 
+              // ++ 更新 P/S 波形图 ++
+              // 从可用列表中随机选择一个 (或者你可以用其他逻辑，例如循环)
+              const randomIndex = Math.floor(Math.random() * availablePlotFiles.length);
+              const selectedPlot = availablePlotFiles[randomIndex];
+              console.log(`Marker clicked, setting plot to: ${selectedPlot}`);
+              setCurrentPlotFilename(selectedPlot);
+              // ++ 更新结束 ++
+
               const infoContent = `
                   <div class="${styles.infoWindow}">
                       <h4>${props.title || '地震详情'}</h4>
                       <p><strong>时间:</strong> ${formatTime(props.time)}</p>
-                      <p><strong>震级:</strong> ${props.mag?.toFixed(1) ?? '未知'} ${props.magType ? `(${props.magType})` : ''}</p>
+                      <p><strong>震级:</strong> ${props.mag?.toFixed(1) ?? '未知'} ${props.magType ? `(${magTypeTranslations[props.magType] || props.magType})` : ''}</p>
                       <p><strong>深度:</strong> ${coords[2]?.toFixed(1) ?? '未知'} km</p>
-                      <p><strong>位置:</strong> ${props.place || '未知'}</p>
-                      <p><strong>状态:</strong> ${props.status || '未知'}</p>
+                      <p><strong>位置:</strong> ${translateLocation(props.place) || '未知'}</p>
+                      <p><strong>状态:</strong> ${statusTranslations[props.status] || props.status || '未知'}</p>
                       <p><strong>海啸预警:</strong> ${props.tsunami === 1 ? '<span style="color: red; font-weight: bold;">是</span>' : '否'}</p>
                       ${props.url ? `<p><a href="${props.url}" target="_blank" rel="noopener noreferrer">查看 USGS 详情</a></p>` : ''}
                       ${props.detail ? `<p><a href="${props.detail}" target="_blank" rel="noopener noreferrer">详细数据 (GeoJSON)</a></p>` : ''}
@@ -580,38 +710,58 @@ const RealtimeEarthquakeMap: React.FC = () => {
             </Card>
 
             {/* 统计 Card */}
-            <Card title={<Title level={5}>统计概要</Title>} size="small" style={{ marginBottom: 16 }}>
+            <Card title={<Title level={5}>统计信息</Title>} size="small" style={{ marginBottom: 16 }}>
               {stats ? (
-                <Row gutter={[8, 8]}> {/* 使用 Row 和 Col 进行布局 */}
-                   <Col span={12}>
-                      <Statistic title="总数量" value={stats.totalCount} />
-                   </Col>
-                   <Col span={12}>
-                      <Statistic title="平均震级" value={stats.avgMagnitude?.toFixed(1) ?? 'N/A'} />
-                   </Col>
-                   <Col span={12}>
-                      <Statistic title="最大震级" value={stats.maxMagnitude?.toFixed(1) ?? 'N/A'} />
-                   </Col>
-                   <Col span={12}>
-                      <Statistic title="最小震级" value={stats.minMagnitude?.toFixed(1) ?? 'N/A'} />
-                   </Col>
-                   <Col span={24}><Divider style={{ margin: '8px 0' }} /></Col>
-                   <Col span={24}><Text strong>按震级分布:</Text></Col>
-                   {/* 遍历 legendMagnitudeLevels 来保证顺序和标签一致性 */}
-                   {legendMagnitudeLevels.map(level => (
-                       <Col span={12} key={`stat-${level.range}`}>
-                            <Text type="secondary" style={{ fontSize: 12 }}>{level.label}:</Text>
-                       </Col>
-                   ))}
-                   {legendMagnitudeLevels.map(level => (
-                       <Col span={12} key={`stat-val-${level.range}`} style={{ textAlign: 'right' }}>
-                            <Text strong>{stats.countByMagnitude[level.range] ?? 0}</Text>
-                       </Col>
-                   ))}
-                </Row>
+                <>
+                  <Statistic title="总事件数" value={stats.totalCount} />
+                  <Row gutter={16} style={{ marginTop: 8 }}>
+                    <Col span={12}>
+                      <Statistic title="最大震级" value={stats.maxMagnitude?.toFixed(1) ?? 'N/A'} prefix="M" />
+                    </Col>
+                    <Col span={12}>
+                      <Statistic title="最小震级" value={stats.minMagnitude?.toFixed(1) ?? 'N/A'} prefix="M" />
+                    </Col>
+                  </Row>
+                  <Statistic title="平均震级" value={stats.avgMagnitude?.toFixed(1) ?? 'N/A'} prefix="M" style={{ marginTop: 8 }}/>
+                  {/* 可以添加按震级分类的统计展示 */}
+                </>
               ) : (
-                <Text type="secondary">暂无统计数据</Text>
+                <Text type="secondary">无可用统计数据</Text>
               )}
+
+              {/* 这里是插入地震详情和图片的好位置 */}
+            </Card>
+
+            {/* ++++++++ 更新后的图像卡片 ++++++++ */}
+            <Card title={<Title level={5}>P/S 波形图示例</Title>} size="small" style={{ marginBottom: 16 }}>
+              {/* ++ 更新说明文字 ++ */}
+              <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+                下方展示 P/S 波地震图。通过分析 P波 和 S波 的到时差、振幅等信息，可以推断地震的关键参数。
+                <Text strong>点击地图上的地震事件可查看关联波形图。</Text>
+              </Paragraph>
+              {/* ++ 说明文字结束 ++ */}
+
+              <Image
+                // 使用状态变量动态构建 src
+                // 确保 '/resources/picture/' 是相对于你服务器根目录的正确路径
+                src={`/resources/picture/${currentPlotFilename}`}
+                alt="P/S 波形图示例"
+                placeholder={
+                    <Spin tip="加载图像..."> <div style={{ width: '100%', height: 150 }}></div> </Spin>
+                }
+                // 添加 key 使得在 src 变化时强制重新渲染 Image，以更新 placeholder 状态
+                key={currentPlotFilename}
+                preview={{
+                    mask: '点击预览大图'
+                }}
+                style={{ maxWidth: '100%', marginTop: 8 }}
+                // 可选：添加错误处理
+                onError={(e: any) => {
+                    console.error(`无法加载图片: /resources/picture/${currentPlotFilename}`, e);
+                    // 你可以在这里设置回一个默认的错误图片或隐藏图片
+                    // e.target.src = '/path/to/error/image.png';
+                 }}
+              />
             </Card>
 
           </div>

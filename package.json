@@ -46,6 +46,7 @@
     "not ie <= 10"
   ],
   "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
     "@ant-design/charts": "^2.2.7",
     "@ant-design/icons": "^4.8.1",
     "@ant-design/pro-components": "^2.6.48",

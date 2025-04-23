@@ -94,49 +94,129 @@ def process_file():
         
         # 读取地震数据
         try:
-            stream = obspy.read(file)
+            # 使用 BytesIO 包装文件流，避免文件指针问题
+            from io import BytesIO
+            file_content = file.read()
+            stream = obspy.read(BytesIO(file_content))
+            file.seek(0) # 重置文件指针以防万一
             logger.info(f"成功读取数据流，包含 {len(stream)} 条记录")
         except Exception as e:
             logger.error(f"读取文件失败: {str(e)}")
             return jsonify({"error": f"读取地震数据失败: {str(e)}"}), 400
         
+        # 检查数据流是否为空
+        if not stream:
+            logger.error("数据流为空")
+            return jsonify({"error": "解析后的数据流为空"}), 400
+            
+        # 提取元数据
+        try:
+            trace = stream[0] # 假设至少有一条记录
+            sampling_rate = trace.stats.sampling_rate
+            start_time_obj = trace.stats.starttime
+            # 转换为 ISO 8601 UTC 字符串
+            start_time_iso = start_time_obj.isoformat()
+            logger.info(f"提取元数据: 采样率={sampling_rate} Hz, 起始时间={start_time_iso}")
+        except (AttributeError, IndexError) as e:
+             logger.error(f"从数据流提取元数据失败: {str(e)}")
+             return jsonify({"error": f"无法从文件中提取必要的元数据（采样率/起始时间）: {str(e)}"}), 400
+
         # 使用模型处理数据
         logger.info("开始处理数据...")
-        events, confidence = DiTing_predict_onnx(
+        # 注意：DiTing_predict_onnx 返回的 'events' 实际上是 postprocessor 的 'matches'
+        # 结构: [[bg, [[p_idx, p_prob]], [[s_idx, s_prob]]], ...]
+        events_matches, confidence_waveforms = DiTing_predict_onnx(
             ort_session, stream, 
             window_length=10000, step_size=3000, 
             p_th=0.1, s_th=0.1, det_th=0.3
         )
-        logger.info(f"处理完成，检测到 {len(events)} 个事件")
+        logger.info(f"模型处理完成，检测到 {len(events_matches)} 个匹配事件结构")
         
         # 保存结果图像
         timestamp = datetime.now().strftime("%y%m%d%H%M%S")
-        save_path = os.path.join(pictures_dir, f"{timestamp}.png")
-        filename = os.path.basename(save_path)
+        # 使用原始文件名的一部分创建更可读的图像文件名
+        base_filename = os.path.splitext(file.filename)[0]
+        plot_filename = f"{base_filename}_{timestamp}.png"
+        save_path = os.path.join(pictures_dir, plot_filename)
         
         logger.info(f"生成可视化结果，保存至: {save_path}")
-        visualize_results(stream, events, output_file=save_path)
-        
-        # 检查图像是否成功生成
-        if not os.path.exists(save_path):
-            logger.error(f"图像文件未成功生成: {save_path}")
-            return jsonify({"error": "生成结果图像失败"}), 500
+        try:
+            # 确保传递正确的 events 结构给 visualize_results
+            visualize_results(stream, events_matches, output_file=save_path)
+        except Exception as vis_e:
+             logger.error(f"生成可视化图像时出错: {str(vis_e)}")
+             # 即使可视化失败，也尝试返回数据
+             plot_filename = None # 设为 None 表示无图
+
+        # 检查图像是否成功生成 (如果 visualize_results 没有抛出错误)
+        if plot_filename and not os.path.exists(save_path):
+            logger.warning(f"图像文件未成功生成: {save_path}")
+            plot_filename = None # 设为 None 表示无图
             
-        logger.info("转换数据格式...")
-        events_list = numpy_to_list(events)
-        confidence_list = numpy_to_list(confidence)
+        logger.info("处理事件数据以匹配前端格式...")
+        p_arrival_indices = []
+        s_arrival_indices = []
+        p_confidence_list = []
+        s_confidence_list = []
         
-        logger.info("请求处理成功，返回结果")
+        # 处理 DiTing_predict_onnx 返回的 events_matches 结构
+        if events_matches and not (len(events_matches) == 1 and np.isnan(events_matches[0][0])):
+            for match in events_matches:
+                try:
+                    # 提取 P 波信息
+                    p_info = match[1][0]
+                    p_idx = p_info[0]
+                    p_prob = p_info[1]
+                    if not np.isnan(p_idx):
+                        p_arrival_indices.append(p_idx)
+                        p_confidence_list.append(p_prob)
+                    else:
+                        # 如果 P 波无效，则跳过此事件或添加 None？根据需求，这里跳过
+                        logger.warning("检测到无效 P 波索引，跳过此事件匹配。")
+                        continue # 或者都添加 None? p_arrival_indices.append(None), p_confidence_list.append(None)
+                    
+                    # 提取 S 波信息
+                    s_info = match[2][0]
+                    s_idx = s_info[0]
+                    s_prob = s_info[1]
+                    s_arrival_indices.append(None if np.isnan(s_idx) else s_idx)
+                    s_confidence_list.append(None if np.isnan(s_prob) else s_prob)
+                    
+                except (IndexError, TypeError) as e:
+                    logger.error(f"处理事件匹配时出错: {match}，错误: {e}")
+                    # 如果单个事件处理失败，可以选择跳过或添加 None
+                    # 这里选择不添加，避免数据不一致
+                    continue 
+        else:
+            logger.info("未检测到有效事件或事件列表为空。")
+        
+        # 确保所有列表长度一致 (如果上面处理逻辑没问题，应该是一致的)
+        # assert len(p_arrival_indices) == len(s_arrival_indices) == len(p_confidence_list) == len(s_confidence_list)
+
+        # 转换 NumPy 类型为 Python 内置类型，并处理 None
+        final_p_indices = numpy_to_list(p_arrival_indices)
+        final_s_indices = numpy_to_list(s_arrival_indices)
+        final_p_confidence = numpy_to_list(p_confidence_list)
+        final_s_confidence = numpy_to_list(s_confidence_list)
+
+        logger.info("请求处理成功，返回格式化结果")
         return jsonify({
-            'events': events_list, 
-            'confidence': confidence_list, 
-            'filename': filename
+            # 移除旧的 'events' 和 'confidence'
+            # 'events': events_list, 
+            # 'confidence': confidence_list, 
+            'plot_filename': plot_filename, # 重命名
+            'p_arrival_indices': final_p_indices,
+            's_arrival_indices': final_s_indices,
+            'p_confidence': final_p_confidence,
+            's_confidence': final_s_confidence,
+            'start_time_utc': start_time_iso,
+            'sampling_rate_hz': sampling_rate
         })
         
     except Exception as e:
-        logger.error(f"处理过程中发生错误: {str(e)}")
+        logger.error(f"处理过程中发生未知错误: {str(e)}")
         traceback.print_exc()
-        return jsonify({"error": f"处理过程中发生错误: {str(e)}"}), 500
+        return jsonify({"error": f"处理过程中发生未知错误: {str(e)}"}), 500
 
 # 图片路由
 @app.route('/resources/picture/<filename>')

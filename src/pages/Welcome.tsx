@@ -4,6 +4,7 @@ import { Card, theme, Spin, Alert, Row, Col, Statistic, List, Typography, Divide
 import React, { useState, useEffect } from 'react';
 import dayjs from 'dayjs';
 import { Link } from '@umijs/max';
+import { Pie, Column } from '@ant-design/charts';
 
 const { Text, Title } = Typography;
 
@@ -47,7 +48,6 @@ interface EarthquakeStats {
 
 // USGS API Endpoints
 const USGS_PAST_DAY_M25_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson';
-const USGS_PAST_WEEK_M45_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson';
 
 // 统计计算函数 (可以进一步扩展)
 const calculateDashboardStats = (dayData: USGSData): EarthquakeStats => {
@@ -105,6 +105,25 @@ const translateLocation = (place: string | null): string => {
   return translatedPlace;
 };
 
+// --- 移除静态饼图数据 ---
+/*
+const magnitudePieData = [
+  { type: 'M 2.5-4', value: 275 },
+  { type: 'M 4-5', value: 110 },
+  { type: 'M 5-6', value: 35 },
+  { type: 'M 6+', value: 8 },
+  { type: '未知', value: 15 },
+];
+*/
+
+// +++ 保留柱状图静态数据 +++
+const dailyCountData = [
+  { date: '昨天 -2', count: 98 },
+  { date: '昨天 -1', count: 115 },
+  { date: '昨天', count: 130 },
+  { date: '今天', count: 105 }, 
+];
+
 const WelcomeDashboard: React.FC = () => {
   const { token } = theme.useToken();
   const { initialState } = useModel('@@initialState');
@@ -112,46 +131,34 @@ const WelcomeDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<EarthquakeStats | null>(null);
-  const [recentQuakes, setRecentQuakes] = useState<USGSFeature[]>([]);
+  // +++ 恢复状态 +++
   const [magnitudeDistribution, setMagnitudeDistribution] = useState<Record<string, number> | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+    setMagnitudeDistribution(null); // 重置
     try {
-      console.log('Fetching dashboard data...');
-      // 并行获取两份数据
-      const [dayResponse, weekResponse] = await Promise.all([
-        fetch(USGS_PAST_DAY_M25_URL),
-        fetch(USGS_PAST_WEEK_M45_URL),
-      ]);
+      console.log('Fetching dashboard data (daily summary)...');
+      const dayResponse = await fetch(USGS_PAST_DAY_M25_URL);
 
-      if (!dayResponse.ok || !weekResponse.ok) {
-        let errorMsg = '';
-        if (!dayResponse.ok) errorMsg += `获取日数据失败: ${dayResponse.status}; `;
-        if (!weekResponse.ok) errorMsg += `获取周数据失败: ${weekResponse.status}; `;
-        throw new Error(errorMsg);
+      if (!dayResponse.ok) {
+        throw new Error(`获取日数据失败: ${dayResponse.status}`);
       }
 
       const dayData: USGSData = await dayResponse.json();
-      const weekData: USGSData = await weekResponse.json();
-      console.log('Data fetched successfully:', { dayCount: dayData.features.length, weekCount: weekData.features.length });
+      console.log('Daily data fetched successfully:', { dayCount: dayData.features.length });
 
       // 1. 计算统计数据
       const calculatedStats = calculateDashboardStats(dayData);
       setStats(calculatedStats);
 
-      // 2. 设置近期强震列表 (M4.5+)
-      // USGS week feed 已经筛选了 M4.5+，直接使用
-      setRecentQuakes(weekData.features);
-
-      // 3. 计算震级分布 (基于日数据 M2.5+)
+      // +++ 恢复计算震级分布 +++
       const dist: Record<string, number> = {
-          '2.5-4': 0,
-          '4-5': 0,
-          '5-6': 0,
-          '6-7': 0,
-          '>= 7': 0,
+          'M 2.5-4': 0, // 使用与之前静态数据一致的key
+          'M 4-5': 0,
+          'M 5-6': 0,
+          'M 6+': 0, 
           '未知': 0,
       };
       let unknownCount = 0;
@@ -160,23 +167,25 @@ const WelcomeDashboard: React.FC = () => {
           if (mag === null) {
               unknownCount++;
           } else if (mag < 4) {
-              dist['2.5-4']++;
+              dist['M 2.5-4']++;
           } else if (mag < 5) {
-              dist['4-5']++;
+              dist['M 4-5']++;
           } else if (mag < 6) {
-              dist['5-6']++;
-          } else if (mag < 7) {
-              dist['6-7']++;
-          } else {
-              dist['>= 7']++;
+              dist['M 5-6']++;
+          } else { // mag >= 6
+              dist['M 6+']++;
           }
       });
       if (unknownCount > 0) {
           dist['未知'] = unknownCount;
       }
-      setMagnitudeDistribution(dist);
+      // 过滤掉数量为0的项，避免饼图显示0%
+      const filteredDist = Object.fromEntries(
+        Object.entries(dist).filter(([_, value]) => value > 0)
+      );
+      setMagnitudeDistribution(filteredDist);
 
-      message.success('仪表盘数据已更新');
+      message.success('仪表盘概要数据已更新');
 
     } catch (e: any) {
       console.error('加载仪表盘数据出错:', e);
@@ -190,6 +199,62 @@ const WelcomeDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // +++ 动态计算饼图数据 +++
+  const dynamicMagnitudePieData = magnitudeDistribution
+    ? Object.entries(magnitudeDistribution).map(([type, value]) => ({ type, value }))
+    : [];
+
+  // +++ 图表配置 +++
+  const magnitudePieConfig = {
+    appendPadding: 10,
+    data: dynamicMagnitudePieData, // 使用动态数据
+    angleField: 'value',
+    colorField: 'type',
+    radius: 0.8,
+    autoFit: true, // 添加 autoFit
+    label: {
+      type: 'inner',
+      offset: '-30%',
+      content: ({ percent }: any) => `${(percent * 100).toFixed(0)}%`,
+      style: {
+        fontSize: 14,
+        textAlign: 'center',
+      },
+    },
+    interactions: [{ type: 'element-active' }],
+    tooltip: {
+      formatter: (datum: any) => {
+        return { name: datum.type, value: `${datum.value} 次` };
+      },
+    },
+  };
+
+  const dailyCountConfig = {
+    data: dailyCountData, // 保持静态数据
+    xField: 'date',
+    yField: 'count',
+    autoFit: true, // 添加 autoFit
+    label: {
+      position: 'middle' as const, 
+      style: {
+        fill: '#FFFFFF',
+        opacity: 0.6,
+      },
+    },
+    xAxis: {
+      label: { autoHide: true, autoRotate: false },
+    },
+    meta: {
+      date: { alias: '日期' },
+      count: { alias: '地震数量' },
+    },
+    tooltip: {
+        formatter: (datum: any) => {
+          return { name: datum.date, value: `${datum.count} 次` };
+        },
+    },
+  };
 
   return (
     <PageContainer header={{ title: '地震概览仪表盘' }}>
@@ -217,35 +282,33 @@ const WelcomeDashboard: React.FC = () => {
                             <Col xs={12} sm={8} md={6} lg={4}>
                                 <Statistic title="M6+ 地震" value={stats.countM6Plus ?? 0} />
                             </Col>
-                            {/* 可以根据需要添加更多统计项 */}
                         </Row>
                     ) : (
                         <Text type="secondary">暂无统计数据</Text>
                     )}
                 </ProCard>
             </Col>
-            <Col span={24}>
-                <ProCard title="近期强震 (过去7天 M4.5+)" bordered headerBordered style={{ minHeight: '300px' }}>
-                    <List
-                        itemLayout="horizontal"
-                        dataSource={recentQuakes}
-                        renderItem={(item: USGSFeature) => (
-                            <List.Item>
-                                <List.Item.Meta
-                                    title={<a href={item.properties.url ?? '#'} target="_blank" rel="noopener noreferrer">{`M ${item.properties.mag?.toFixed(1) ?? '?'} - 地点: ${translateLocation(item.properties.place)}`}</a>}
-                                    description={formatTime(item.properties.time)}
-                                />
-                            </List.Item>
-                        )}
-                        pagination={{
-                            pageSize: 5,
-                            size: 'small',
-                            hideOnSinglePage: true,
-                        }}
-                        locale={{ emptyText: '暂无 M4.5+ 地震数据' }}
-                        loading={loading}
-                    />
-                </ProCard>
+            <Col xs={24} md={12} lg={8}>
+                <Card title="震级分布 (过去24小时 M2.5+)" bordered={false}>
+                   <Spin spinning={loading || !magnitudeDistribution} tip="加载分布数据中...">
+                    <div style={{ width: '100%', height: 'calc(400px - 70px)' }}> 
+                      {dynamicMagnitudePieData.length > 0 ? (
+                           <Pie {...magnitudePieConfig} height={330} /> 
+                      ) : (
+                          !loading && <Text type="secondary">暂无分布数据</Text>
+                      )}
+                    </div>
+                   </Spin>
+                </Card>
+            </Col>
+            <Col xs={24} md={12} lg={16}>
+                <Card title="每日地震数量 (静态数据)" bordered={false}>
+                   <Spin spinning={loading} tip="加载图表中..."> 
+                     <div style={{ width: '100%', height: 'calc(400px - 70px)' }}>
+                       <Column {...dailyCountConfig} height={330} />
+                     </div>
+                   </Spin>
+                </Card>
             </Col>
         </Row>
       </Spin>
